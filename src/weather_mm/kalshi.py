@@ -8,7 +8,7 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import quote
 
 import httpx
 
@@ -94,8 +94,8 @@ class KalshiPublicClient:
             raise ValueError("series_ticker must not be empty")
         if max_markets < 1:
             raise ValueError("max_markets must be positive")
-        if page_size < 1 or page_size > 1000:
-            raise ValueError("page_size must be between 1 and 1000")
+        if page_size < 1 or page_size > 200:
+            raise ValueError("page_size must be between 1 and 200")
 
         captures: list[dict[str, Any]] = []
         markets: list[dict[str, Any]] = []
@@ -124,9 +124,9 @@ class KalshiPublicClient:
         """Fetch a public order-book snapshot for one market ticker."""
         if not ticker.strip():
             raise ValueError("ticker must not be empty")
-        if depth < 0:
-            raise ValueError("depth must be zero (venue default/full depth) or positive")
+        if depth < 0 or depth > 100:
+            raise ValueError("depth must be between 0 and 100; zero requests all levels")
         return await self._get(
-            f"/markets/{ticker}/orderbook",
+            f"/markets/{quote(ticker, safe='')}/orderbook",
             {"depth": depth},
         )
