@@ -4,7 +4,7 @@
 
 ## Scope
 
-The first code milestone is intentionally read-only. It uses Kalshi's unauthenticated public REST endpoints to:
+The first code milestone is intentionally read-only. It uses Kalshi's unauthenticated public REST endpoints documented for [market listing](https://docs.kalshi.com/api-reference/market/get-markets) and [order-book retrieval](https://docs.kalshi.com/api-reference/market/get-market-orderbook) to:
 
 1. Paginate through a bounded set of markets for a series such as `KXHIGHNY`.
 2. Request an order-book snapshot for a selected ticker.
@@ -31,7 +31,7 @@ Both commands append to `data/raw/kalshi-public.jsonl`. Use an active ticker ret
 
 ## Capture format
 
-Each JSONL line is one HTTP response envelope. The full response payload is preserved as returned by the API. The envelope records:
+Each JSONL line is one HTTP response envelope. The full response payload is preserved as returned by the API. The order-book endpoint returns YES and NO bids; in a binary market, one side's bid corresponds to the opposite side's ask. The depth parameter accepts 0 through 100, where 0 requests all levels. The market-list page size is capped at 200. The envelope records:
 
 - endpoint including query parameters;
 - request start and receive timestamps in UTC;
