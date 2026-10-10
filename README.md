@@ -22,13 +22,14 @@ The initial venue study focuses on Kalshi daily temperature contracts because th
 
 ## First data-collection step
 
-The read-only CLI discovers current markets and captures a public REST order-book snapshot. Setup, capture format, limitations, and next verification steps are documented in [the collector notes](docs/data-collection/public-kalshi-collector.md). The first successful local run is recorded in [the run log](docs/data-collection/first-collector-run-2026-10-11.md).
+The read-only CLI discovers current markets and captures a public REST order-book snapshot. Setup, capture format, limitations, and next verification steps are documented in [the collector notes](docs/data-collection/public-kalshi-collector.md). The first successful local run is recorded in [the run log](docs/data-collection/first-collector-run-2026-10-11.md). A bounded three-snapshot sampler run is recorded [here](docs/data-collection/rest-sampling-run-2026-10-11.md).
 
 ```shell
 uv sync
 uv run weather-mm markets --series-ticker KXHIGHNY --max-markets 100
 uv run weather-mm snapshot --ticker <ticker-returned-by-discovery> --depth 0
 uv run weather-mm normalize
+uv run weather-mm sample --ticker <ticker-returned-by-discovery> --count 20 --interval-seconds 30
 ```
 
 Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally excluded from Git. Use a ticker that the discovery command currently reports as open. The `normalize` command validates each payload hash and writes local market and order-book CSVs under `data/derived/`; see [normalization notes](docs/data-collection/normalization.md).
@@ -39,6 +40,7 @@ Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally exclud
 - [Public Kalshi collector notes](docs/data-collection/public-kalshi-collector.md) — setup, record format, operating limits, and verification plan.
 - [First collector run](docs/data-collection/first-collector-run-2026-10-11.md) — environment, observed API responses, payload hash, and scope of the verification.
 - [Capture normalization](docs/data-collection/normalization.md) — integrity checks, CSV schema, and data limitations.
+- [REST sampling run](docs/data-collection/rest-sampling-run-2026-10-11.md) — observations from the first bounded snapshot series.
 - `tests/` — focused tests for normalization, hash checks, and invalid order-book levels.
 - `uv.lock` — resolved Python dependencies for reproducible setup.
 - `src/weather_mm/` — read-only REST client, JSONL storage, and command-line entry point.
@@ -58,7 +60,7 @@ Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally exclud
 
 ## Current limitations
 
-- Three focused unit tests pass, and one local raw file normalizes into the documented CSVs. These checks do not establish feed continuity, queue position, fill probability, or performance. No performance result is available.
+- Four focused unit tests pass, and six local captures normalize into 13 market rows and 193 book levels. A short REST sample does not establish feed continuity, queue position, fill probability, or performance. No performance result is available.
 - Kalshi REST market data is public, but its order-book WebSocket requires authentication. REST snapshots can support a collector prototype, but sparse snapshots cannot reveal exact queue priority or all intervening book events.
 - Kalshi's current Member Agreement lists France as restricted for trading event contracts. A VPN does not change eligibility. Any eventual execution must comply with actual location, account eligibility, venue terms, and applicable law.
 - Weather contract settlement is rule-specific. A model must match the named station, time convention, measurement source, rounding, and revision rules for each market.
