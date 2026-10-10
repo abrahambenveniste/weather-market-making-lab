@@ -10,9 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from weather_mm.kalshi import KalshiPublicClient
+from weather_mm.normalize import normalize_jsonl
 from weather_mm.storage import append_records
 
 DEFAULT_OUTPUT = Path("data/raw/kalshi-public.jsonl")
+DEFAULT_MARKETS_OUTPUT = Path("data/derived/markets.csv")
+DEFAULT_LEVELS_OUTPUT = Path("data/derived/orderbook-levels.csv")
 
 
 def _market_summary(market: dict[str, Any]) -> dict[str, Any]:
@@ -59,6 +62,14 @@ async def _snapshot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _normalize(args: argparse.Namespace) -> int:
+    counts = normalize_jsonl(args.input, args.markets_output, args.levels_output)
+    print(f"Validated {counts['capture_records']} capture record(s)")
+    print(f"Wrote {counts['market_rows']} market row(s) to {args.markets_output}")
+    print(f"Wrote {counts['orderbook_levels']} order-book level(s) to {args.levels_output}")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="weather-mm",
@@ -77,14 +88,27 @@ def _parser() -> argparse.ArgumentParser:
     snapshot.add_argument("--ticker", required=True)
     snapshot.add_argument("--depth", type=int, default=0)
     snapshot.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+
+    normalize = commands.add_parser(
+        "normalize", help="validate raw capture hashes and write normalized CSV files"
+    )
+    normalize.add_argument("--input", type=Path, default=DEFAULT_OUTPUT)
+    normalize.add_argument("--markets-output", type=Path, default=DEFAULT_MARKETS_OUTPUT)
+    normalize.add_argument("--levels-output", type=Path, default=DEFAULT_LEVELS_OUTPUT)
     return parser
 
 
 def main() -> None:
     args = _parser().parse_args()
     try:
-        exit_code = asyncio.run(_markets(args) if args.command == "markets" else _snapshot(args))
+        if args.command == "normalize":
+            exit_code = _normalize(args)
+        else:
+            exit_code = asyncio.run(
+                _markets(args) if args.command == "markets" else _snapshot(args)
+            )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     raise SystemExit(exit_code)
+
