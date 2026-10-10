@@ -2,7 +2,7 @@
 
 Research and engineering project on event-driven market making for weather prediction contracts.
 
-> **Project status: first quote baseline implemented.** The repository contains a read-only public REST collector and sampler, capture integrity validation, normalized CSV outputs, and a deterministic inventory-aware quoting baseline. Eleven focused unit tests cover the quote and normalization mechanics. No fills, strategy backtest, paper-trading result, or live-trading result have been produced. Nothing here is evidence of profitability.
+> **Project status: first quote baseline and sparse-snapshot markout diagnostic implemented.** The repository contains a read-only public REST collector and sampler, capture integrity validation, normalized CSV outputs, a deterministic inventory-aware quoting baseline, and a replay diagnostic that measures hypothetical quote markouts against later midpoints. No fills, strategy backtest, paper-trading result, or live-trading result have been produced. Nothing here is evidence of profitability.
 
 ## Research question
 
@@ -16,7 +16,7 @@ The initial venue study focuses on Kalshi daily temperature contracts because th
 2. **Capture and data quality** — collect public market metadata/order-book snapshots where permitted; preserve source timestamps and local receive timestamps; validate schema and gaps.
 3. **Weather probabilities** — build simple, calibrated probabilities for the contract's actual settlement outcome using only forecasts that were available at each simulated decision time.
 4. **Market-making baseline** — quote around a fair probability, then add inventory skew, risk limits, and fee-aware quote selection.
-5. **Execution simulator** — replay the collected data with conservative/base/optimistic fill assumptions, queue uncertainty, cancellation and order-entry latency, and explicit no-market-impact caveats.
+5. **Execution simulator** — first measure hypothetical quote markouts; then replay richer event-level data with conservative/base/optimistic fill assumptions, queue uncertainty, cancellation and order-entry latency, and explicit no-market-impact caveats.
 6. **Evaluation** — compare against simple baselines using chronological holdouts and report net P&L, markouts, inventory, calibration, fill assumptions, and uncertainty.
 7. **Paper-trading adapter** — only after replay and operational controls are documented. No live adapter is planned for a restricted jurisdiction.
 
@@ -31,6 +31,7 @@ uv run weather-mm snapshot --ticker <ticker-returned-by-discovery> --depth 0
 uv run weather-mm normalize
 uv run weather-mm sample --ticker <ticker-returned-by-discovery> --count 20 --interval-seconds 30
 uv run weather-mm quote --fair-value 0.50 --inventory 10
+uv run weather-mm markout --horizons 1,3,5
 ```
 
 Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally excluded from Git. Use a ticker that the discovery command currently reports as open. The `normalize` command validates each payload hash and writes local market and order-book CSVs under `data/derived/`; see [normalization notes](docs/data-collection/normalization.md).
@@ -43,9 +44,11 @@ Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally exclud
 - [Capture normalization](docs/data-collection/normalization.md) — integrity checks, CSV schema, and data limitations.
 - [REST sampling run](docs/data-collection/rest-sampling-run-2026-10-11.md) — observations from the first bounded snapshot series.
 - [Quote engine](docs/strategy/quote-engine.md) — formulas, configuration, example, and limitations.
-- `tests/` — focused tests for normalization, hash checks, and invalid order-book levels.
+- [Sparse-snapshot markout study](docs/strategy/snapshot-markout-study.md) — quote replay, markout definitions, runnable command, and limitations.
+- [First markout run](docs/experiments/snapshot-markout-run-2026-10-11.md) — command, small-sample output, verification, and interpretation.
+- `tests/` — focused tests for quote generation, normalization, and replay markout mechanics.
 - `uv.lock` — resolved Python dependencies for reproducible setup.
-- `src/weather_mm/` — read-only REST client, JSONL storage, validation/normalization, deterministic quote baseline, and CLI.
+- `src/weather_mm/` — read-only REST client, JSONL storage, validation/normalization, deterministic quote baseline, sparse snapshot replay diagnostic, and CLI.
 - `data/raw/` and `data/derived/` — local API captures and normalized CSVs; ignored by Git by default.
 - `experiments/` — versioned configurations and reproducible run outputs (planned).
 
@@ -62,7 +65,7 @@ Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally exclud
 
 ## Current limitations
 
-- Eleven focused unit tests pass; six local captures normalize into 13 market rows and 193 book levels. The quote baseline uses manually supplied parameters and does not model fills, venue fees, or P&L. A short REST sample does not establish feed continuity or queue position.
+- Fifteen focused unit tests pass. The small local capture yields only four usable replay snapshots and is a pipeline sample. The markout diagnostic does not model fills, venue fees, or P&L; a short REST sample does not establish feed continuity or queue position.
 - Kalshi REST market data is public, but its order-book WebSocket requires authentication. REST snapshots can support a collector prototype, but sparse snapshots cannot reveal exact queue priority or all intervening book events.
 - Kalshi's current Member Agreement lists France as restricted for trading event contracts. A VPN does not change eligibility. Any eventual execution must comply with actual location, account eligibility, venue terms, and applicable law.
 - Weather contract settlement is rule-specific. A model must match the named station, time convention, measurement source, rounding, and revision rules for each market.

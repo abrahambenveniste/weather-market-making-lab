@@ -13,6 +13,7 @@ from typing import Any
 from weather_mm.kalshi import KalshiPublicClient
 from weather_mm.normalize import normalize_jsonl
 from weather_mm.quotes import QuoteConfig, make_quotes
+from weather_mm.replay import replay_markouts
 from weather_mm.storage import append_records
 
 DEFAULT_OUTPUT = Path("data/raw/kalshi-public.jsonl")
@@ -118,6 +119,22 @@ def _quote(args: argparse.Namespace) -> int:
     return 0
 
 
+def _markout(args: argparse.Namespace) -> int:
+    try:
+        horizons = tuple(int(value.strip()) for value in args.horizons.split(","))
+    except ValueError as exc:
+        raise ValueError("horizons must be comma-separated positive integers") from exc
+    config = QuoteConfig(base_half_spread=args.base_half_spread)
+    summary = replay_markouts(
+        args.input,
+        args.output,
+        horizons=horizons,
+        config=config,
+    )
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="weather-mm",
@@ -171,6 +188,15 @@ def _parser() -> argparse.ArgumentParser:
     quote.add_argument(
         "--adverse-selection-widening", type=Decimal, default=Decimal("0")
     )
+
+    markout = commands.add_parser(
+        "markout",
+        help="replay normalized snapshots and calculate hypothetical quote markouts",
+    )
+    markout.add_argument("--input", type=Path, default=Path("data/derived/orderbook-levels.csv"))
+    markout.add_argument("--output", type=Path, default=Path("data/derived/snapshot-markouts.csv"))
+    markout.add_argument("--horizons", default="1,3,5", help="future observations, e.g. 1,3,5")
+    markout.add_argument("--base-half-spread", type=Decimal, default=Decimal("0.02"))
     return parser
 
 
@@ -181,6 +207,8 @@ def main() -> None:
             exit_code = _normalize(args)
         elif args.command == "quote":
             exit_code = _quote(args)
+        elif args.command == "markout":
+            exit_code = _markout(args)
         else:
             handler = {
                 "markets": _markets,
