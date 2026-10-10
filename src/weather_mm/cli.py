@@ -62,6 +62,26 @@ async def _snapshot(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _sample(args: argparse.Namespace) -> int:
+    if not 1 <= args.count <= 1000:
+        raise ValueError("count must be between 1 and 1000")
+    if args.interval_seconds < 1:
+        raise ValueError("interval-seconds must be at least 1")
+    async with KalshiPublicClient() as client:
+        for sample_number in range(1, args.count + 1):
+            capture = await client.get_orderbook(ticker=args.ticker, depth=args.depth)
+            append_records(args.output, [capture])
+            print(
+                f"Sample {sample_number}/{args.count}: HTTP {capture['http_status']}; "
+                f"received {capture['received_at_utc']}; "
+                f"payload SHA-256 {capture['payload_sha256']}"
+            )
+            if sample_number < args.count:
+                await asyncio.sleep(args.interval_seconds)
+    print(f"Appended {args.count} snapshot(s) to {args.output}")
+    return 0
+
+
 def _normalize(args: argparse.Namespace) -> int:
     counts = normalize_jsonl(args.input, args.markets_output, args.levels_output)
     print(f"Validated {counts['capture_records']} capture record(s)")
@@ -89,6 +109,15 @@ def _parser() -> argparse.ArgumentParser:
     snapshot.add_argument("--depth", type=int, default=0)
     snapshot.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
 
+    sample = commands.add_parser(
+        "sample", help="collect a bounded series of public REST book snapshots"
+    )
+    sample.add_argument("--ticker", required=True)
+    sample.add_argument("--count", type=int, default=20)
+    sample.add_argument("--interval-seconds", type=float, default=30.0)
+    sample.add_argument("--depth", type=int, default=0)
+    sample.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+
     normalize = commands.add_parser(
         "normalize", help="validate raw capture hashes and write normalized CSV files"
     )
@@ -104,11 +133,15 @@ def main() -> None:
         if args.command == "normalize":
             exit_code = _normalize(args)
         else:
-            exit_code = asyncio.run(
-                _markets(args) if args.command == "markets" else _snapshot(args)
-            )
+            handler = {
+                "markets": _markets,
+                "snapshot": _snapshot,
+                "sample": _sample,
+            }[args.command]
+            exit_code = asyncio.run(handler(args))
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     raise SystemExit(exit_code)
+
 
