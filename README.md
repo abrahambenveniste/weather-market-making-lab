@@ -2,7 +2,7 @@
 
 Research and engineering project on event-driven market making for weather prediction contracts.
 
-> **Project status: research setup.** The repository currently contains project framing and a first-pass literature and systems review. No strategy backtest, paper-trading result, or live-trading result has been produced. Nothing in this repository should be read as evidence of profitability.
+> **Project status: collector implementation added; local run still pending.** The repository contains project framing, a first-pass literature and systems review, and a read-only public REST collector. The collector has not yet been run from a local checkout or schema-verified by the project owner. No strategy backtest, paper-trading result, or live-trading result has been produced. Nothing in this repository should be read as evidence of profitability.
 
 ## Research question
 
@@ -20,11 +20,24 @@ The initial venue study focuses on Kalshi daily temperature contracts because th
 6. **Evaluation** — compare against simple baselines using chronological holdouts and report net P&L, markouts, inventory, calibration, fill assumptions, and uncertainty.
 7. **Paper-trading adapter** — only after replay and operational controls are documented. No live adapter is planned for a restricted jurisdiction.
 
+## First data-collection step
+
+The read-only CLI discovers current markets and captures a public REST order-book snapshot. Setup, capture format, limitations, and next verification steps are documented in [the collector notes](docs/data-collection/public-kalshi-collector.md).
+
+```shell
+uv sync
+uv run weather-mm markets --series-ticker KXHIGHNY --max-markets 100
+uv run weather-mm snapshot --ticker <ticker-returned-by-discovery> --depth 0
+```
+
+Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally excluded from Git. Use a ticker that the discovery command currently reports as open.
+
 ## Repository map
 
 - [Research landscape review](docs/research/market-making-literature-review.md) — initial source review, design implications, and open questions.
-- `src/` — strategy and data code (planned).
-- `data/` — local data only; raw and derived datasets are excluded from Git by default (planned).
+- [Public Kalshi collector notes](docs/data-collection/public-kalshi-collector.md) — setup, record format, operating limits, and verification plan.
+- `src/weather_mm/` — read-only REST client, JSONL storage, and command-line entry point.
+- `data/raw/` — local API captures; ignored by Git by default.
 - `experiments/` — versioned configurations and reproducible run outputs (planned).
 
 ## Reproducibility principles
@@ -40,7 +53,7 @@ The initial venue study focuses on Kalshi daily temperature contracts because th
 
 ## Current limitations
 
-- The repo is at the research stage; no performance result is available.
+- The collector code is implemented but awaits a local execution and schema check. No performance result is available.
 - Kalshi REST market data is public, but its order-book WebSocket requires authentication. REST snapshots can support a collector prototype, but sparse snapshots cannot reveal exact queue priority or all intervening book events.
 - Kalshi's current Member Agreement lists France as restricted for trading event contracts. A VPN does not change eligibility. Any eventual execution must comply with actual location, account eligibility, venue terms, and applicable law.
 - Weather contract settlement is rule-specific. A model must match the named station, time convention, measurement source, rounding, and revision rules for each market.
