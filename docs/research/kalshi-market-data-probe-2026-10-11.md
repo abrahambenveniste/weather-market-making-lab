@@ -8,7 +8,7 @@
 
 `GET https://external-api.kalshi.com/trade-api/v2/markets?series_ticker=KXHIGHNY&status=open`
 
-The response returned active daily contracts for the `KXHIGHNY-26OCT11` event, with market tickers, top-of-book prices and sizes, rules, and event timestamps.
+The response returned active daily contracts for the `KXHIGHNY-26OCT11` event, with market tickers, top-of-book prices and available size fields, rules, and event timestamps.
 
 One returned market was `KXHIGHNY-26OCT11-B68.5`:
 
@@ -21,8 +21,8 @@ One returned market was `KXHIGHNY-26OCT11-B68.5`:
 | Open / close | 2026-10-10T14:00:00Z / 2026-10-12T05:00:00Z |
 | YES bid / size | $0.01 / 150.43 |
 | YES ask / size | $0.02 / 442.85 |
-| NO bid / size | $0.98 / 716.96 |
-| NO ask / size | $0.99 / 14.00 |
+| NO bid / ask | $0.98 / $0.99 |
+| NO bid / ask sizes | Not present in this market-list response |
 | Reported volume / open interest | 717.96 / 716.96 contracts |
 
 Prices and quantities are a single API observation, not a historical series and not a realized fill. The market-list response exposes top-of-book fields; it does not establish that we have full-depth snapshots or an event-by-event book history.
