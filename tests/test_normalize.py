@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import csv
+import asyncio
 import hashlib
 import json
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
 from weather_mm.normalize import CaptureValidationError, normalize_jsonl
+from weather_mm.cli import _sample
 
 
 def _capture(payload: dict[str, Any], endpoint: str) -> dict[str, Any]:
@@ -112,7 +115,19 @@ class NormalizeJsonlTests(unittest.TestCase):
             with self.assertRaisesRegex(CaptureValidationError, "between 0 and 1"):
                 normalize_jsonl(source, root / "markets.csv", root / "levels.csv")
 
+    def test_sampler_rejects_invalid_bounds_before_network_access(self) -> None:
+        common = {"ticker": "TICKER", "depth": 0, "output": Path("unused.jsonl")}
+        with self.assertRaisesRegex(ValueError, "count must be between"):
+            asyncio.run(
+                _sample(Namespace(**common, count=0, interval_seconds=30.0))
+            )
+        with self.assertRaisesRegex(ValueError, "interval-seconds must be at least"):
+            asyncio.run(
+                _sample(Namespace(**common, count=1, interval_seconds=0.0))
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
