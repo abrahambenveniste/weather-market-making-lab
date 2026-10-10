@@ -2,7 +2,7 @@
 
 Research and engineering project on event-driven market making for weather prediction contracts.
 
-> **Project status: first public collector run completed.** The repository contains project framing, a first-pass literature and systems review, a read-only public REST collector, a dependency lockfile, and a run log for one successful local capture. The observed API responses returned HTTP 200 and were parsed locally. No strategy backtest, paper-trading result, or live-trading result has been produced. Nothing in this repository should be read as evidence of profitability.
+> **Project status: capture normalization implemented.** The repository contains a read-only public REST collector, payload-integrity validation, normalized CSV outputs, and unit coverage for valid captures and malformed data. The first local capture normalized into 13 market rows and 49 order-book levels across three response records. No strategy backtest, paper-trading result, or live-trading result has been produced. Nothing in this repository should be read as evidence of profitability.
 
 ## Research question
 
@@ -28,18 +28,21 @@ The read-only CLI discovers current markets and captures a public REST order-boo
 uv sync
 uv run weather-mm markets --series-ticker KXHIGHNY --max-markets 100
 uv run weather-mm snapshot --ticker <ticker-returned-by-discovery> --depth 0
+uv run weather-mm normalize
 ```
 
-Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally excluded from Git. Use a ticker that the discovery command currently reports as open.
+Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally excluded from Git. Use a ticker that the discovery command currently reports as open. The `normalize` command validates each payload hash and writes local market and order-book CSVs under `data/derived/`; see [normalization notes](docs/data-collection/normalization.md).
 
 ## Repository map
 
 - [Research landscape review](docs/research/market-making-literature-review.md) — initial source review, design implications, and open questions.
 - [Public Kalshi collector notes](docs/data-collection/public-kalshi-collector.md) — setup, record format, operating limits, and verification plan.
 - [First collector run](docs/data-collection/first-collector-run-2026-10-11.md) — environment, observed API responses, payload hash, and scope of the verification.
+- [Capture normalization](docs/data-collection/normalization.md) — integrity checks, CSV schema, and data limitations.
+- `tests/` — focused tests for normalization, hash checks, and invalid order-book levels.
 - `uv.lock` — resolved Python dependencies for reproducible setup.
 - `src/weather_mm/` — read-only REST client, JSONL storage, and command-line entry point.
-- `data/raw/` — local API captures; ignored by Git by default.
+- `data/raw/` and `data/derived/` — local API captures and normalized CSVs; ignored by Git by default.
 - `experiments/` — versioned configurations and reproducible run outputs (planned).
 
 ## Reproducibility principles
@@ -55,7 +58,7 @@ Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally exclud
 
 ## Current limitations
 
-- The first run verified installation and response parsing for one public discovery call and one REST snapshot. It does not establish feed continuity or performance. No performance result is available.
+- Three focused unit tests pass, and one local raw file normalizes into the documented CSVs. These checks do not establish feed continuity, queue position, fill probability, or performance. No performance result is available.
 - Kalshi REST market data is public, but its order-book WebSocket requires authentication. REST snapshots can support a collector prototype, but sparse snapshots cannot reveal exact queue priority or all intervening book events.
 - Kalshi's current Member Agreement lists France as restricted for trading event contracts. A VPN does not change eligibility. Any eventual execution must comply with actual location, account eligibility, venue terms, and applicable law.
 - Weather contract settlement is rule-specific. A model must match the named station, time convention, measurement source, rounding, and revision rules for each market.
