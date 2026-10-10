@@ -27,6 +27,12 @@ Choose a ticker printed by the discovery command, then capture its current publi
 uv run weather-mm snapshot --ticker KXHIGHNY-REPLACE-WITH-A-CURRENT-TICKER --depth 0
 ```
 
+For a bounded, slow-cadence time series, use `sample`. It defaults to 20 snapshots 30 seconds apart; each wait starts after the prior request completes, and `--count` is capped at 1,000.
+
+```shell
+uv run weather-mm sample --ticker KXHIGHNY-REPLACE-WITH-A-CURRENT-TICKER --count 20 --interval-seconds 30
+```
+
 Both commands append to `data/raw/kalshi-public.jsonl`. Use an active ticker returned by the first command; market tickers and availability change over time.
 
 ## Capture format
@@ -45,6 +51,8 @@ The hash helps detect accidental changes to a payload during later handling. It 
 
 A REST snapshot is a point-in-time observation. It does not reveal queue position, order arrivals/cancellations between snapshots, or executable depth after network and processing delay. It is insufficient by itself to claim fill probability, realized market-making P&L, or HFT-grade latency. Those questions require timestamped updates or trades and an explicit replay model.
 
+Kalshi's current [order-book WebSocket documentation](https://docs.kalshi.com/websockets/orderbook-updates) says the channel requires API-key authentication, sends a snapshot first, and then sends incremental deltas. The bounded REST sampler is therefore a practical public-data path, but its interval must not be presented as exchange event cadence or HFT data. The current [rate-limit documentation](https://docs.kalshi.com/getting_started/rate_limits) describes token budgets for authenticated requests; this project has not established a published unauthenticated polling allowance. The sampler is deliberately bounded and must stop/back off on errors rather than being run continuously at a tight interval.
+
 The collector retries only idempotent GET requests after network errors, rate limits, and server errors. Captures from a retry represent the response ultimately received; failed attempts are not written as observations. This is a research utility, not a production feed handler.
 
 ## Next evidence to collect
@@ -53,3 +61,4 @@ The collector retries only idempotent GET requests after network errors, rate li
 - Save a small sample locally and inspect price/size units and field names.
 - Compare top-of-book fields from market metadata with the order-book snapshot.
 - Add a separate WebSocket capture path only after documenting subscription messages, snapshot/delta sequencing, reconnect behavior, and timestamp semantics.
+
