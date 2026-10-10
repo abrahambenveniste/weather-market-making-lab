@@ -6,11 +6,13 @@ import argparse
 import asyncio
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from weather_mm.kalshi import KalshiPublicClient
 from weather_mm.normalize import normalize_jsonl
+from weather_mm.quotes import QuoteConfig, make_quotes
 from weather_mm.storage import append_records
 
 DEFAULT_OUTPUT = Path("data/raw/kalshi-public.jsonl")
@@ -90,6 +92,32 @@ def _normalize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _quote(args: argparse.Namespace) -> int:
+    config = QuoteConfig(
+        tick_size=args.tick_size,
+        min_price=args.min_price,
+        max_price=args.max_price,
+        base_half_spread=args.base_half_spread,
+        inventory_skew_per_contract=args.inventory_skew_per_contract,
+        base_size=args.base_size,
+        max_inventory=args.max_inventory,
+    )
+    quote = make_quotes(
+        fair_value=args.fair_value,
+        inventory=args.inventory,
+        config=config,
+        uncertainty_widening=args.uncertainty_widening,
+        adverse_selection_widening=args.adverse_selection_widening,
+    )
+    print(
+        json.dumps(
+            {name: str(value) for name, value in quote.__dict__.items()},
+            ensure_ascii=True,
+        )
+    )
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="weather-mm",
@@ -124,6 +152,25 @@ def _parser() -> argparse.ArgumentParser:
     normalize.add_argument("--input", type=Path, default=DEFAULT_OUTPUT)
     normalize.add_argument("--markets-output", type=Path, default=DEFAULT_MARKETS_OUTPUT)
     normalize.add_argument("--levels-output", type=Path, default=DEFAULT_LEVELS_OUTPUT)
+
+    quote = commands.add_parser(
+        "quote", help="calculate a deterministic inventory-aware YES quote"
+    )
+    quote.add_argument("--fair-value", type=Decimal, default=Decimal("0.50"))
+    quote.add_argument("--inventory", type=Decimal, default=Decimal("0"))
+    quote.add_argument("--tick-size", type=Decimal, default=Decimal("0.01"))
+    quote.add_argument("--min-price", type=Decimal, default=Decimal("0.01"))
+    quote.add_argument("--max-price", type=Decimal, default=Decimal("0.99"))
+    quote.add_argument("--base-half-spread", type=Decimal, default=Decimal("0.02"))
+    quote.add_argument(
+        "--inventory-skew-per-contract", type=Decimal, default=Decimal("0.001")
+    )
+    quote.add_argument("--base-size", type=Decimal, default=Decimal("5"))
+    quote.add_argument("--max-inventory", type=Decimal, default=Decimal("20"))
+    quote.add_argument("--uncertainty-widening", type=Decimal, default=Decimal("0"))
+    quote.add_argument(
+        "--adverse-selection-widening", type=Decimal, default=Decimal("0")
+    )
     return parser
 
 
@@ -132,6 +179,8 @@ def main() -> None:
     try:
         if args.command == "normalize":
             exit_code = _normalize(args)
+        elif args.command == "quote":
+            exit_code = _quote(args)
         else:
             handler = {
                 "markets": _markets,
@@ -143,5 +192,6 @@ def main() -> None:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     raise SystemExit(exit_code)
+
 
 
