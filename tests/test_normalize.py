@@ -45,6 +45,8 @@ class NormalizeJsonlTests(unittest.TestCase):
                         "yes_bid_dollars": "0.0100",
                         "yes_ask_dollars": "0.0200",
                         "volume_fp": "100.00",
+                        "settlement_value_dollars": "1.0000",
+                        "result": "yes",
                     }
                 ],
                 "cursor": "",
@@ -79,6 +81,8 @@ class NormalizeJsonlTests(unittest.TestCase):
             with levels_path.open(encoding="utf-8", newline="") as source_file:
                 level_rows = list(csv.DictReader(source_file))
             self.assertEqual(market_rows[0]["yes_bid_dollars"], "0.0100")
+            self.assertEqual(market_rows[0]["settlement_value_dollars"], "1.0000")
+            self.assertEqual(market_rows[0]["result"], "yes")
             self.assertEqual(level_rows[0]["ticker"], "KXHIGHNY-26OCT11-B68.5")
             self.assertEqual([row["contract_side"] for row in level_rows], ["yes", "no", "no"])
             self.assertEqual(level_rows[1]["size_fp"], "300.00")
@@ -103,6 +107,33 @@ class NormalizeJsonlTests(unittest.TestCase):
             self.assertEqual(markets_path.read_text(encoding="utf-8"), "previous markets\n")
             self.assertEqual(levels_path.read_text(encoding="utf-8"), "previous levels\n")
 
+    def test_normalizes_single_market_detail_capture_and_result(self) -> None:
+        record = _capture(
+            {
+                "market": {
+                    "ticker": "KXHIGHNY-26OCT09-T76",
+                    "status": "finalized",
+                    "result": "no",
+                    "settlement_value_dollars": "0.0000",
+                    "expiration_value": "70.00",
+                }
+            },
+            "https://external-api.kalshi.com/trade-api/v2/markets/KXHIGHNY-26OCT09-T76",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "captures.jsonl"
+            source.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            markets_path = root / "markets.csv"
+            result = normalize_jsonl(source, markets_path, root / "levels.csv")
+            with markets_path.open(encoding="utf-8", newline="") as source_file:
+                rows = list(csv.DictReader(source_file))
+            self.assertEqual(result["market_rows"], 1)
+            self.assertEqual(rows[0]["ticker"], "KXHIGHNY-26OCT09-T76")
+            self.assertEqual(rows[0]["result"], "no")
+            self.assertEqual(rows[0]["settlement_value_dollars"], "0.0000")
+            self.assertEqual(rows[0]["expiration_value"], "70.00")
+
     def test_rejects_out_of_range_book_price(self) -> None:
         record = _capture(
             {"orderbook_fp": {"yes_dollars": [["1.01", "2"]], "no_dollars": []}},
@@ -113,6 +144,18 @@ class NormalizeJsonlTests(unittest.TestCase):
             source = root / "captures.jsonl"
             source.write_text(json.dumps(record) + "\n", encoding="utf-8")
             with self.assertRaisesRegex(CaptureValidationError, "between 0 and 1"):
+                normalize_jsonl(source, root / "markets.csv", root / "levels.csv")
+
+    def test_rejects_unknown_market_result(self) -> None:
+        record = _capture(
+            {"markets": [{"ticker": "TICKER", "result": "maybe"}]},
+            "https://external-api.kalshi.com/trade-api/v2/markets?status=settled",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "captures.jsonl"
+            source.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(CaptureValidationError, "expected yes, no, or void"):
                 normalize_jsonl(source, root / "markets.csv", root / "levels.csv")
 
     def test_sampler_rejects_invalid_bounds_before_network_access(self) -> None:

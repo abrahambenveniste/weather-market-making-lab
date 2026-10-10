@@ -130,3 +130,9 @@ class KalshiPublicClient:
             f"/markets/{quote(ticker, safe='')}/orderbook",
             {"depth": depth},
         )
+
+    async def get_market(self, *, ticker: str) -> dict[str, Any]:
+        """Fetch public details and settlement rules for one market ticker."""
+        if not ticker.strip():
+            raise ValueError("ticker must not be empty")
+        return await self._get(f"/markets/{quote(ticker, safe='')}", {})

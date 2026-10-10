@@ -24,6 +24,9 @@ MARKET_COLUMNS = (
     "no_ask_dollars",
     "volume_fp",
     "open_interest_fp",
+    "settlement_value_dollars",
+    "result",
+    "expiration_value",
     "close_time",
     "expiration_time",
     "source_payload_sha256",
@@ -105,6 +108,7 @@ def _market_rows(
             "yes_ask_dollars",
             "no_bid_dollars",
             "no_ask_dollars",
+            "settlement_value_dollars",
         ):
             if row[column] != "":
                 price = _decimal(row[column], context=f"{market_context} {column}")
@@ -113,6 +117,13 @@ def _market_rows(
                         f"{market_context} {column}: price must be between 0 and 1"
                     )
                 row[column] = format(price, "f")
+        if row["result"] != "" and str(row["result"]).lower() not in {"yes", "no", "void"}:
+            raise CaptureValidationError(
+                f"{market_context} result: expected yes, no, or void"
+            )
+        if row["expiration_value"] != "":
+            value = _decimal(row["expiration_value"], context=f"{market_context} expiration_value")
+            row["expiration_value"] = format(value, "f")
         yield row
 
 
@@ -194,6 +205,11 @@ def _parse_capture(
         if not isinstance(market_payload, list):
             raise CaptureValidationError(f"{context}: payload.markets must be a list")
         markets.extend(_market_rows(market_payload, timestamp, actual_hash, context=context))
+    if "market" in payload:
+        market_payload = payload["market"]
+        if not isinstance(market_payload, dict):
+            raise CaptureValidationError(f"{context}: payload.market must be an object")
+        markets.extend(_market_rows([market_payload], timestamp, actual_hash, context=context))
     if "orderbook_fp" in payload:
         ticker = _ticker_from_endpoint(record.get("endpoint"), context=context)
         levels.extend(
@@ -205,7 +221,7 @@ def _parse_capture(
                 context=context,
             )
         )
-    if "markets" not in payload and "orderbook_fp" not in payload:
+    if not {"markets", "market", "orderbook_fp"}.intersection(payload):
         raise CaptureValidationError(f"{context}: payload contains no supported market data")
     return markets, levels
 

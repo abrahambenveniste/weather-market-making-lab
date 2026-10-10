@@ -12,6 +12,7 @@ from typing import Any
 
 from weather_mm.kalshi import KalshiPublicClient
 from weather_mm.normalize import normalize_jsonl
+from weather_mm.outcomes import aggregate_weather_outcomes
 from weather_mm.quotes import QuoteConfig, make_quotes
 from weather_mm.replay import replay_markouts
 from weather_mm.storage import append_records
@@ -21,7 +22,9 @@ DEFAULT_MARKETS_OUTPUT = Path("data/derived/markets.csv")
 DEFAULT_LEVELS_OUTPUT = Path("data/derived/orderbook-levels.csv")
 
 
-def _market_summary(market: dict[str, Any]) -> dict[str, Any]:
+def _market_summary(
+    market: dict[str, Any], *, include_rules: bool = False
+) -> dict[str, Any]:
     fields = (
         "ticker",
         "event_ticker",
@@ -34,10 +37,22 @@ def _market_summary(market: dict[str, Any]) -> dict[str, Any]:
         "no_ask_dollars",
         "volume_fp",
         "open_interest_fp",
+        "settlement_value_dollars",
+        "result",
         "close_time",
         "expiration_time",
+        "expiration_value",
     )
-    return {field: market[field] for field in fields if field in market}
+    summary = {field: market[field] for field in fields if field in market}
+    if include_rules:
+        summary.update(
+            {
+                field: market[field]
+                for field in ("rules_primary", "rules_secondary")
+                if field in market
+            }
+        )
+    return summary
 
 
 async def _markets(args: argparse.Namespace) -> int:
@@ -50,9 +65,10 @@ async def _markets(args: argparse.Namespace) -> int:
         )
     append_records(args.output, captures)
     print(f"Saved {len(captures)} page capture(s) to {args.output}")
-    print(f"Discovered {len(markets)} market(s):")
-    for market in markets:
-        print(json.dumps(_market_summary(market), ensure_ascii=False))
+    print(f"Discovered {len(markets)} market(s)")
+    if not args.summary_only:
+        for market in markets:
+            print(json.dumps(_market_summary(market), ensure_ascii=False))
     return 0
 
 
@@ -62,6 +78,17 @@ async def _snapshot(args: argparse.Namespace) -> int:
     append_records(args.output, [capture])
     print(f"Saved order-book snapshot for {args.ticker} to {args.output}")
     print(f"HTTP {capture['http_status']}; payload SHA-256 {capture['payload_sha256']}")
+    return 0
+
+
+async def _market(args: argparse.Namespace) -> int:
+    async with KalshiPublicClient() as client:
+        capture = await client.get_market(ticker=args.ticker)
+    append_records(args.output, [capture])
+    market = capture["payload"].get("market", {})
+    print(f"Saved market details for {args.ticker} to {args.output}")
+    print(f"HTTP {capture['http_status']}; payload SHA-256 {capture['payload_sha256']}")
+    print(json.dumps(_market_summary(market, include_rules=True), ensure_ascii=True, indent=2))
     return 0
 
 
@@ -90,6 +117,16 @@ def _normalize(args: argparse.Namespace) -> int:
     print(f"Validated {counts['capture_records']} capture record(s)")
     print(f"Wrote {counts['market_rows']} market row(s) to {args.markets_output}")
     print(f"Wrote {counts['orderbook_levels']} order-book level(s) to {args.levels_output}")
+    return 0
+
+
+def _outcomes(args: argparse.Namespace) -> int:
+    summary = aggregate_weather_outcomes(
+        args.input,
+        args.output,
+        event_prefix=args.event_prefix,
+    )
+    print(json.dumps(summary, indent=2))
     return 0
 
 
@@ -148,11 +185,18 @@ def _parser() -> argparse.ArgumentParser:
     markets.add_argument("--max-markets", type=int, default=100)
     markets.add_argument("--page-size", type=int, default=100)
     markets.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    markets.add_argument("--summary-only", action="store_true")
 
     snapshot = commands.add_parser("snapshot", help="capture one public order-book snapshot")
     snapshot.add_argument("--ticker", required=True)
     snapshot.add_argument("--depth", type=int, default=0)
     snapshot.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+
+    market = commands.add_parser(
+        "market", help="capture one market's public metadata and settlement rules"
+    )
+    market.add_argument("--ticker", required=True)
+    market.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
 
     sample = commands.add_parser(
         "sample", help="collect a bounded series of public REST book snapshots"
@@ -169,6 +213,13 @@ def _parser() -> argparse.ArgumentParser:
     normalize.add_argument("--input", type=Path, default=DEFAULT_OUTPUT)
     normalize.add_argument("--markets-output", type=Path, default=DEFAULT_MARKETS_OUTPUT)
     normalize.add_argument("--levels-output", type=Path, default=DEFAULT_LEVELS_OUTPUT)
+
+    outcomes = commands.add_parser(
+        "outcomes", help="aggregate finalized weather markets into event-level outcomes"
+    )
+    outcomes.add_argument("--input", type=Path, default=DEFAULT_MARKETS_OUTPUT)
+    outcomes.add_argument("--output", type=Path, default=Path("data/derived/weather-outcomes.csv"))
+    outcomes.add_argument("--event-prefix", default="KXHIGHNY-")
 
     quote = commands.add_parser(
         "quote", help="calculate a deterministic inventory-aware YES quote"
@@ -205,6 +256,8 @@ def main() -> None:
     try:
         if args.command == "normalize":
             exit_code = _normalize(args)
+        elif args.command == "outcomes":
+            exit_code = _outcomes(args)
         elif args.command == "quote":
             exit_code = _quote(args)
         elif args.command == "markout":
@@ -212,6 +265,7 @@ def main() -> None:
         else:
             handler = {
                 "markets": _markets,
+                "market": _market,
                 "snapshot": _snapshot,
                 "sample": _sample,
             }[args.command]

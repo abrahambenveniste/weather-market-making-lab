@@ -1,14 +1,15 @@
 # Public Kalshi collector: design and operating notes
 
-**Status:** implementation added; local execution and endpoint behavior still need to be verified by the project owner.
+**Status:** public REST listing, single-market detail, order-book snapshot, normalization, and bounded sampling have been exercised locally. See dated run notes linked from the README.
 
 ## Scope
 
 The first code milestone is intentionally read-only. It uses Kalshi's unauthenticated public REST endpoints documented for [market listing](https://docs.kalshi.com/api-reference/market/get-markets) and [order-book retrieval](https://docs.kalshi.com/api-reference/market/get-market-orderbook) to:
 
 1. Paginate through a bounded set of markets for a series such as `KXHIGHNY`.
-2. Request an order-book snapshot for a selected ticker.
-3. Append each raw response to local JSON Lines storage with request/receive timestamps, HTTP status, response duration, and a SHA-256 hash of the normalized payload.
+2. Fetch one market's exact rule text and settlement metadata.
+3. Request an order-book snapshot for a selected ticker.
+4. Append each raw response to local JSON Lines storage with request/receive timestamps, HTTP status, response duration, and a SHA-256 hash of the normalized payload.
 
 It does not use API credentials, submit/cancel orders, or write captures into Git. Raw data is ignored by `.gitignore`; the collector prints market summaries so a researcher can select a currently open ticker.
 
@@ -25,6 +26,12 @@ Choose a ticker printed by the discovery command, then capture its current publi
 
 ```shell
 uv run weather-mm snapshot --ticker KXHIGHNY-REPLACE-WITH-A-CURRENT-TICKER --depth 0
+```
+
+Capture the individual market's settlement rules before defining an outcome label:
+
+```shell
+uv run weather-mm market --ticker KXHIGHNY-REPLACE-WITH-A-CURRENT-TICKER
 ```
 
 For a bounded, slow-cadence time series, use `sample`. It defaults to 20 snapshots 30 seconds apart; each wait starts after the prior request completes, and `--count` is capped at 1,000.
@@ -57,8 +64,8 @@ The collector retries only idempotent GET requests after network errors, rate li
 
 ## Next evidence to collect
 
-- Verify the current endpoint response schema against the official API docs and a local run.
-- Save a small sample locally and inspect price/size units and field names.
-- Compare top-of-book fields from market metadata with the order-book snapshot.
+- Find an allowed source for historical settled outcomes and public trades.
+- Establish whether a historical Weather Company settlement feed can be used or select a contract tied to an open source.
+- Compare top-of-book fields from market metadata with the order-book snapshot for a larger sample.
 - Add a separate WebSocket capture path only after documenting subscription messages, snapshot/delta sequencing, reconnect behavior, and timestamp semantics.
 

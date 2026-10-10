@@ -2,7 +2,7 @@
 
 Research and engineering project on event-driven market making for weather prediction contracts.
 
-> **Project status: first quote baseline and sparse-snapshot markout diagnostic implemented.** The repository contains a read-only public REST collector and sampler, capture integrity validation, normalized CSV outputs, a deterministic inventory-aware quoting baseline, and a replay diagnostic that measures hypothetical quote markouts against later midpoints. No fills, strategy backtest, paper-trading result, or live-trading result have been produced. Nothing here is evidence of profitability.
+> **Project status: quote baseline, sparse-snapshot markout diagnostic, and resolved-outcome pipeline implemented.** The repository contains a read-only public REST collector, capture validation and normalization, deterministic inventory-aware quotes, hypothetical quote markouts, and an aggregator for Kalshi-reported weather outcomes. No fills, forecast model, strategy backtest, paper-trading result, or live-trading result have been produced. Nothing here is evidence of profitability.
 
 ## Research question
 
@@ -14,7 +14,7 @@ The initial venue study focuses on Kalshi daily temperature contracts because th
 
 1. **Scope and data feasibility** — review contract rules, endpoint access, forecast vintages, settlement observations, and data-use terms.
 2. **Capture and data quality** — collect public market metadata/order-book snapshots where permitted; preserve source timestamps and local receive timestamps; validate schema and gaps.
-3. **Weather probabilities** — build simple, calibrated probabilities for the contract's actual settlement outcome using only forecasts that were available at each simulated decision time.
+3. **Weather probabilities** — verify the outcome field and location/time mapping, then build simple calibrated probabilities using only forecasts that were available at each simulated decision time.
 4. **Market-making baseline** — quote around a fair probability, then add inventory skew, risk limits, and fee-aware quote selection.
 5. **Execution simulator** — first measure hypothetical quote markouts; then replay richer event-level data with conservative/base/optimistic fill assumptions, queue uncertainty, cancellation and order-entry latency, and explicit no-market-impact caveats.
 6. **Evaluation** — compare against simple baselines using chronological holdouts and report net P&L, markouts, inventory, calibration, fill assumptions, and uncertainty.
@@ -27,8 +27,11 @@ The read-only CLI discovers current markets and captures a public REST order-boo
 ```shell
 uv sync
 uv run weather-mm markets --series-ticker KXHIGHNY --max-markets 100
+uv run weather-mm market --ticker <ticker-returned-by-discovery>
+uv run weather-mm markets --series-ticker KXHIGHNY --status settled --max-markets 1000 --page-size 200 --summary-only
 uv run weather-mm snapshot --ticker <ticker-returned-by-discovery> --depth 0
 uv run weather-mm normalize
+uv run weather-mm outcomes
 uv run weather-mm sample --ticker <ticker-returned-by-discovery> --count 20 --interval-seconds 30
 uv run weather-mm quote --fair-value 0.50 --inventory 10
 uv run weather-mm markout --horizons 1,3,5
@@ -39,9 +42,13 @@ Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally exclud
 ## Repository map
 
 - [Research landscape review](docs/research/market-making-literature-review.md) — initial source review, design implications, and open questions.
+- [Market settlement audit](docs/research/market-settlement-audit-2026-10-11.md) — actual market terms, captured payload hash, and remaining source questions.
+- [Weather probability data plan](docs/research/weather-probability-data-plan.md) — archived forecast options, look-ahead controls, and modeling decision gates.
 - [Public Kalshi collector notes](docs/data-collection/public-kalshi-collector.md) — setup, record format, operating limits, and verification plan.
 - [First collector run](docs/data-collection/first-collector-run-2026-10-11.md) — environment, observed API responses, payload hash, and scope of the verification.
 - [Capture normalization](docs/data-collection/normalization.md) — integrity checks, CSV schema, and data limitations.
+- [Outcome aggregation](docs/data-collection/weather-outcome-aggregation.md) — validation and event-level label construction.
+- [Settled outcome collection run](docs/data-collection/settled-weather-outcomes-run-2026-10-11.md) — API query, coverage summary, hashes, and limits.
 - [REST sampling run](docs/data-collection/rest-sampling-run-2026-10-11.md) — observations from the first bounded snapshot series.
 - [Quote engine](docs/strategy/quote-engine.md) — formulas, configuration, example, and limitations.
 - [Sparse-snapshot markout study](docs/strategy/snapshot-markout-study.md) — quote replay, markout definitions, runnable command, and limitations.
@@ -65,7 +72,7 @@ Captures append to `data/raw/kalshi-public.jsonl`, which is intentionally exclud
 
 ## Current limitations
 
-- Fifteen focused unit tests pass. The small local capture yields only four usable replay snapshots and is a pipeline sample. The markout diagnostic does not model fills, venue fees, or P&L; a short REST sample does not establish feed continuity or queue position.
+- Twenty-two focused unit tests pass. The local outcome sample contains 68 daily labels, and the quote replay contains only four usable snapshots. The outcome field's exact semantics still need verification. The markout diagnostic does not model fills, venue fees, or P&L; a short REST sample does not establish feed continuity or queue position.
 - Kalshi REST market data is public, but its order-book WebSocket requires authentication. REST snapshots can support a collector prototype, but sparse snapshots cannot reveal exact queue priority or all intervening book events.
 - Kalshi's current Member Agreement lists France as restricted for trading event contracts. A VPN does not change eligibility. Any eventual execution must comply with actual location, account eligibility, venue terms, and applicable law.
 - Weather contract settlement is rule-specific. A model must match the named station, time convention, measurement source, rounding, and revision rules for each market.

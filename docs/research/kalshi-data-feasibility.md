@@ -1,7 +1,7 @@
 # Kalshi data feasibility: first read-only probe
 
 **Observed:** 2026-10-11  
-**Status:** one public series-metadata request succeeded; market enumeration and order-book capture have not yet been implemented or independently exercised in this project.  
+**Status:** public market enumeration, exact market-detail capture, order-book snapshots, and bounded REST sampling have been exercised. See the dated capture logs and [market settlement audit](market-settlement-audit-2026-10-11.md).
 **Scope:** public-data feasibility only. No account credentials, trading requests, or order placement.
 
 ## Probe
@@ -25,21 +25,20 @@ The observed response identified:
 
 This is a live metadata observation, not a historical data set. The response did not enumerate particular daily markets or establish their exact settlement interval.
 
-## Finding: generic help and current series metadata differ
+## Finding: use market-specific rules
 
-Kalshi's [general weather guide](https://help.kalshi.com/en/articles/13823837-weather-markets) says daily high/low temperature markets settle using the final NWS Daily Climate Report, while hourly temperature markets use The Weather Company. The live `KXHIGHNY` series response instead names The Weather Company as its settlement source even though the series frequency is daily.
+Kalshi's [general weather guide](https://help.kalshi.com/en/articles/13823837-weather-markets) describes NWS reports for some daily high/low markets. The live `KXHIGHNY` series response names The Weather Company. We fetched exact rules for `KXHIGHNY-26OCT11-B68.5`; its market-level rule explicitly says the New York City (`CLINYC`) maximum for October 11, 2026 is determined according to The Weather Company.
 
-This discrepancy is material. It may reflect differences between series-level and individual-market rules, a product/rule update, or general documentation that does not cover this series' current contract terms. We have not resolved which explanation applies. Do not select the weather target, station data, daily window, or settlement verification source based only on a generic help article or a series-level field.
+For this observed contract, market-level terms agree with the series-level source. The generic help article does not override the individual market rule. The market rule still leaves questions about a freely available historical The Weather Company feed, precise station mapping, and some time/rounding details; see the dated audit. Do not substitute another weather source and call it the exact target without validating the mapping.
 
 ### Required resolution before forecast modeling
 
-For one specific open daily market:
+For one specific open daily market, the public REST collector and market-detail command now capture:
 
-1. Retrieve the market object using the public [Get Markets endpoint](https://docs.kalshi.com/api-reference/market/get-markets), filtered by `series_ticker=KXHIGHNY` and open status.
-2. Save the ticker, title, `rules_primary`, `rules_secondary`, settlement source, strike/range, close time, and expiration/settlement fields as observed.
-3. Open the market's linked contract terms and identify the authoritative weather station/source, units, rounding, time window, revisions, and settlement timing.
-4. Cross-check at least one resolved market against the final source record before defining outcome labels.
-5. Record any disagreement in a dated note and keep the original observed response. Do not silently rewrite earlier findings.
+1. Retrieve open market objects using the public [Get Markets endpoint](https://docs.kalshi.com/api-reference/market/get-markets).
+2. Fetch the individual market using the public [Get Market endpoint](https://docs.kalshi.com/api-reference/market/get-market); save its ticker, rules, strike/range, close, expiry, and settlement fields as observed.
+3. Establish a permitted historical source for final outcomes and verify at least one resolved market before defining labels.
+4. Record any mismatch in a dated note and retain the raw local payload. Do not silently rewrite earlier findings.
 
 ## What the public API docs establish
 
@@ -47,7 +46,7 @@ Kalshi's [market-data quick start](https://docs.kalshi.com/getting_started/quick
 
 The public [market endpoint](https://docs.kalshi.com/api-reference/market/get-markets) describes market metadata and filtering/pagination. The [order-book endpoint](https://docs.kalshi.com/api-reference/market/get-market-orderbook) returns aggregated YES and NO bid depth. The real-time [order-book WebSocket](https://docs.kalshi.com/websockets/orderbook-updates) requires API-key authentication and emits a snapshot followed by deltas.
 
-In the project environment, the public series GET returned data without credentials. That confirms this one metadata route is reachable; it does **not** yet prove the market-list endpoint, order-book endpoint, polling rate, or any historical order-book archive is available from our collector. Those are the next checks.
+In the project environment, unauthenticated public requests successfully retrieved series metadata, open markets, the selected market's exact rule text, and order-book snapshots. A three-snapshot REST sample also completed. This verifies those request paths and observed response shapes for the recorded runs; it does **not** prove an uninterrupted feed, a complete historical order-book archive, or the availability of a permitted historical settlement feed.
 
 ## Implications for the collector
 
@@ -66,15 +65,13 @@ Keep the first collector read-only and small:
 
 Kalshi's [current Member Agreement](https://kalshi.com/docs/kalshi-member-agreement.pdf), Section VI, names France among restricted jurisdictions for event-contract trading. This probe accessed a public metadata URL and placed no orders. The research/paper track remains separate from live eligibility. No VPN-based trading workaround is part of the project.
 
-## Next feasibility checkpoint
+## Remaining feasibility checkpoint
 
-Before building quoting logic, run one reproducible collector session against a specific open market and answer:
+The first read-only endpoints work, so the next data decisions are:
 
-- Can the market list and exact market rules be retrieved unauthenticated?
-- Can a public order-book snapshot be retrieved for that ticker?
-- What prices, sizes, levels, and timestamp fields are actually returned?
-- How quickly do those fields change under a documented polling interval?
-- Is there a permitted source for historical trades and final settlement values?
-- Do the market-level settlement rules agree with the series response and the official weather record?
+- Find a permitted source for historical settled market outcomes and public trades.
+- Determine if settlement labels are enough for a forecast model, or if licensed Weather Company data is needed.
+- Compare forecast data coverage and issue-time semantics with the selected market's exact close and settlement date.
+- Keep the sparse REST quote-markout diagnostic separate from any later fill and P&L simulator.
 
-Only after these answers should we lock the event schema, choose a capture cadence, or estimate whether the available data can support a meaningful execution simulation.
+Do not estimate profitability until the outcome labels, quote/fill assumptions, fees, and timestamp coverage are defensible.
